@@ -6,9 +6,9 @@ This release comes from the existing controller project, including its original 
 
 ## Hardware and wiring
 
-You need one original four-relay ESP32 T-Relay per controller, a suitable board power supply, voltage-free contact sensors, and a **LILYGO T-U2T or compatible USB-to-serial adapter with 3.3 V logic** for the first flash. Use a 2.4 GHz Wi-Fi network. This configuration uses ESP-IDF and 4 MB flash; it targets neither the T-Relay-S3 nor the eight-relay board.
+You need one original four-relay ESP32 T-Relay per controller, a suitable **12–24 V DC power supply connected to the board's DC input screw terminals**, voltage-free contact sensors, and a **LILYGO T-U2T or compatible USB-to-serial adapter with 3.3 V logic** for the first flash. Use a 2.4 GHz Wi-Fi network. This configuration uses ESP-IDF and 4 MB flash; it targets neither the T-Relay-S3 nor the eight-relay board.
 
-The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/Xinyuan-LilyGO/LilyGo-T-Relay/blob/main/ESPHome/T-Relay-4-ESP32.yaml). Consult the [manufacturer's board, pinout, power and programming documentation](https://wiki.lilygo.cc/products/t-relay-series/t-relay/) for your actual revision. The USB-C socket supplies power; a USB cable alone cannot program this board.
+The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/Xinyuan-LilyGO/LilyGo-T-Relay/blob/main/ESPHome/T-Relay-4-ESP32.yaml). Consult the [manufacturer's board, pinout, power and programming documentation](https://wiki.lilygo.cc/products/t-relay-series/t-relay/) for your actual revision. Power this build through the **12–24 V DC input terminals**, observing the board's marked polarity. Flash through the serial programming adapter; a USB cable alone cannot program this board.
 
 | Function | GPIO | Connection / behavior |
 | --- | --- | --- |
