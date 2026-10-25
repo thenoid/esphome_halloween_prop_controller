@@ -23,7 +23,9 @@ The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/X
 
 Use GPIO labels, not header position numbers. Inputs use internal pull-ups and inverted logic: closed = ON. GPIO25 drives the onboard LED and is not an input. Unused inputs may remain open. Long outdoor leads need suitable input protection and pull-ups for the installation. **These are bare 3.3 V GPIO inputs**: never connect a powered 5/12/24 V sensor output directly. Relay optocouplers do not isolate these inputs.
 
-For an isolated prop trigger, wire its verified voltage-free trigger circuit through **COM and NO** of the chosen relay to close it when the relay energizes. Use **COM and NC** only when the prop explicitly requires an opening trigger: energizing opens NC, and firmware OFF closes it again. Confirm the prop's trigger voltage, current, polarity and required pulse first. Firmware ON/OFF describes the relay coil, not whether a prop is safe. Do not assume a fog-machine remote is low voltage; have its interface verified before connecting it.
+The fog machine's manual button is **normally open**: pressing it closes the circuit. Wire the chosen relay's **COM and NO terminals across the button's two contacts**, in parallel with the original button. Use K3 on controller 1 and K1 on controllers 2 and 3; leave NC unused for these fog triggers. With the relay OFF, COM–NO is open. During a fog sequence, the relay energizes and closes COM–NO for `Fog Duration` (default 10 seconds), simulating a held button press; it then releases and opens COM–NO again. The original button remains usable independently of the controller's timers and cooldowns. These output contacts are separate from the controller's GPIO contact inputs.
+
+Confirm the prop's trigger voltage, current and required button-hold duration before connecting it. Firmware ON/OFF describes the relay coil, not whether a prop is safe. Do not assume a fog-machine remote is low voltage; have its interface verified before connecting it.
 
 ## Features and default routines
 

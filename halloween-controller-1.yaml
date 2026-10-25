@@ -30,8 +30,8 @@ script:
             not:
               script.is_running: startup_relay_check
           then:
-            # t=0: start fog and its independent OFF timer. Energizing K3
-            # opens COM-NC. Announce the accepted sequence at the fog start.
+            # t=0: energize K3 to close COM-NO across the normally open fog
+            # button. Start its OFF timer and announce the accepted sequence.
             - switch.turn_on: relay_3
             - script.execute:
                 id: relay_3_sequence_timer
