@@ -8,7 +8,7 @@ This release comes from the existing controller project, including its original 
 
 You need one original four-relay ESP32 T-Relay per controller, a suitable **12–24 V DC power supply connected to the board's DC input screw terminals**, voltage-free contact sensors, and a **LILYGO T-U2T or compatible USB-to-serial adapter with 3.3 V logic** for the first flash. Use a 2.4 GHz Wi-Fi network. This configuration uses ESP-IDF and 4 MB flash; it targets neither the T-Relay-S3 nor the eight-relay board.
 
-The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/Xinyuan-LilyGO/LilyGo-T-Relay/blob/main/ESPHome/T-Relay-4-ESP32.yaml). Consult the [manufacturer's board, pinout, power and programming documentation](https://wiki.lilygo.cc/products/t-relay-series/t-relay/) for your actual revision. Power this build through the **12–24 V DC input terminals**, observing the board's marked polarity. Flash through the serial programming adapter; a USB cable alone cannot program this board.
+The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/Xinyuan-LilyGO/LilyGo-T-Relay/blob/main/ESPHome/T-Relay-4-ESP32.yaml). The [original board's labeled pinout](https://github.com/Xinyuan-LilyGO/LilyGo-T-Relay/blob/main/image/T-Relay-en.jpg) identifies the expansion GPIOs, GPIO25 LED and 12–24 V DC input. Power this build through those **DC input terminals**, observing the board's marked polarity. Flash through the T-U2T programming connection (or an appropriately wired compatible serial adapter); a cable to the board's USB-C socket alone cannot program it. Check the actual board revision against the pinout before wiring.
 
 | Function | GPIO | Connection / behavior |
 | --- | --- | --- |
@@ -23,9 +23,11 @@ The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/X
 
 Use GPIO labels, not header position numbers. Inputs use internal pull-ups and inverted logic: closed = ON. GPIO25 drives the onboard LED and is not an input. Unused inputs may remain open. Long outdoor leads need suitable input protection and pull-ups for the installation. **These are bare 3.3 V GPIO inputs**: never connect a powered 5/12/24 V sensor output directly. Relay optocouplers do not isolate these inputs.
 
-The fog machine's manual button is **normally open**: pressing it closes the circuit. Wire the chosen relay's **COM and NO terminals across the button's two contacts**, in parallel with the original button. Use K3 on controller 1 and K1 on controllers 2 and 3; leave NC unused for these fog triggers. With the relay OFF, COM–NO is open. During a fog sequence, the relay energizes and closes COM–NO for `Fog Duration` (default 10 seconds), simulating a held button press; it then releases and opens COM–NO again. The original button remains usable independently of the controller's timers and cooldowns. These output contacts are separate from the controller's GPIO contact inputs.
+The fog machine's original **normally open manual button remains connected**. In this build, the relay's **COM and NO leads are soldered onto the same two contacts on the back of that button**, placing the relay in parallel with it. Use K3 on controller 1 and K1 on controllers 2 and 3; leave NC unused for these fog triggers. With the relay OFF, COM–NO is open. During a fog sequence, the relay energizes and closes COM–NO for `Fog Duration` (default 10 seconds), simulating a held button press; it then releases and opens COM–NO again. The original button can still close the circuit independently of the controller's timers, cooldowns and Stop All. The relay contacts provide a switch closure, not a 12–24 V power output. They are separate from the controller's GPIO contact inputs.
 
 Confirm the prop's trigger voltage, current and required button-hold duration before connecting it. Firmware ON/OFF describes the relay coil, not whether a prop is safe. Do not assume a fog-machine remote is low voltage; have its interface verified before connecting it.
+
+`Fog Duration` controls the relay-contact closure. The firmware does not monitor fog-machine readiness or confirm actual fog output.
 
 ## Features and default routines
 
@@ -38,12 +40,14 @@ Confirm the prop's trigger voltage, current and required button-hold duration be
 
 `halloween-controller.yaml` is a compatibility alias for controller 1. Flash one entry point per board; use the canonical numbered files for new installations.
 
+The table lists initial software defaults, not measurements of an installed machine. Previously saved duration/cooldown settings take precedence after reboot; check the actual UI values before testing. The receiver delays are fixed in YAML: each receiver waits 3.5 or 15 seconds after receiving the matching event, so source-to-output timing also includes network and scheduling latency.
+
 - Four contacts have 50 ms debounce and independent limits of one accepted trip per second. Suppressed trips are discarded; a held contact never repeats and a contact closed at boot does not start a routine.
 - **Test Contact** buttons simulate the same sensor path, including local mappings and network events. UI descriptions show which sequence each assigned contact triggers.
 - Timed sequence buttons, Busy and Cooling Down indicators, and persistent duration/cooldown settings are available in Home Assistant and the web UI. Durations support 0.1–600 s; cooldowns support 0–600 s. Source fog and spider routines can run concurrently.
 - Triggers received while a sequence is busy are discarded, never queued. Receiving boards are busy throughout remote delay, output and cooldown. Their manual **Trigger Fog** starts immediately when idle.
-- Four direct manual relay switches are available on each board. They bypass duration and cooldown settings and remain ON until switched OFF, stopped or rebooted. A running sequence's pending OFF timer can still turn its relay OFF.
-- **Stop All** cancels that board's startup check, simulations, pending delays, sequences and cooldowns, then switches all outputs OFF. It does not stop other boards or cancel delays they have already accepted. It is a software control, not an emergency stop.
+- Four direct manual relay switches are available on each board. They bypass duration and cooldown settings and remain ON until switched OFF, stopped or rebooted. A running sequence's pending OFF timer or startup check can still turn its relay OFF. Generic ON Duration settings for unused channels do not make their manual switches timed.
+- **Stop All** cancels that board's startup check, simulations, pending delays, sequences and cooldowns, then switches all outputs OFF. It clears sequence cooldowns, so a new request can start a sequence immediately; contact debounce/trip limits still apply. It does not latch the board into a disabled state, stop other boards, cancel delays they have already accepted, or open a separately held physical fog button. It is a software control, not an emergency stop.
 - Encrypted native API and encrypted OTA updates share your API key. Fallback Wi-Fi/captive portal, Wi-Fi signal, IP address and uptime diagnostics are included. Wi-Fi/API loss does not reboot the board automatically.
 
 ### Startup behavior and safety
@@ -61,10 +65,12 @@ Use suitable fuses, enclosures, strain relief, grounding and outdoor protection,
 3. Keep the three generic device names for the supplied choreography. If you rename controller 1, also change `source == "prop-controller-1"` in both receivers and update descriptions. Every board on the event network must have a unique name. Change `friendly_name` and `contact_N_label` for your own UI as needed.
 4. With props disconnected, validate and compile your chosen file, then install over the programming adapter. Connect TX/RX/GND and boot controls according to the manufacturer's programming header instructions; never apply 5 V serial logic. In Device Builder use **Validate**, then **Install**. CLI equivalents are below; select the correct serial port when prompted.
 5. Add the device once under Home Assistant **Settings → Devices & services → ESPHome**, using the board's address and API key if discovery fails. Open `http://prop-controller-1.local/` (or its assigned address) for controller 1's browser UI; substitute the other example name for other boards.
-6. Verify the bench checklist before connecting loads. Rebuild/reflash after YAML changes; timing controls in the UI apply to subsequent sequence phases/runs according to when the value is read.
+6. Verify the bench checklist before connecting loads. Rebuild/reflash after YAML changes. Controller 1 reads an output's duration when its sequence is requested; controllers 2/3 read Fog Duration when their delayed output starts. Every board reads cooldown when its output timer finishes. Editing a setting does not change an already-running output timer or cooldown.
+
+For the CLI steps below, install **Python 3.13** (the tested version); an older system `python3` may not satisfy the pinned ESPHome package's requirements. Device Builder users do not need a separate local Python installation.
 
 ```sh
-python3 -m venv .venv
+python3.13 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 cp secrets.example.yaml secrets.yaml
@@ -121,7 +127,7 @@ clang++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -I . tests
 python tests/validate-release.py --compile
 ```
 
-CI runs native regression checks plus ESPHome validation and C++ generation for all five entry points. It neither flashes boards nor uploads firmware containing credentials. See [release verification](docs/release-verification.md) for the checks actually completed for this release.
+CI runs native regression checks plus ESPHome validation and C++ generation for all five entry points. It neither flashes boards nor uploads firmware containing credentials. See [release verification](docs/release-verification.md) for the checks actually completed for this release and the [README audit](docs/readme-audit.md) for the hardware/code evidence and physical verification limits.
 
 ## License
 
