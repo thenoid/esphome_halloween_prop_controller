@@ -1,0 +1,3 @@
+# Compatibility entry point; controller 1 has one source of truth.
+packages:
+  controller_1: !include halloween-controller-1.yaml

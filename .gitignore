@@ -1,0 +1,32 @@
+# Real credentials, including secrets in nested Device Builder directories.
+secrets.yaml
+secrets.yml
+secrets.*.yaml
+secrets.*.yml
+!secrets.example.yaml
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+
+# ESPHome build/cache output and firmware embed network credentials.
+.esphome/
+.pio/
+build/
+*.bin
+*.elf
+*.map
+*.log
+*.pcap
+*.pcapng
+
+# Local tools and editor files.
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+*.bak
+*.before-*

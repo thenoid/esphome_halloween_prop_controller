@@ -1,0 +1,113 @@
+# Included once per channel; the framework supplies default pin assignments.
+# Contacts broadcast edges; controller-specific routine packages add mappings.
+binary_sensor:
+  - platform: gpio
+    id: contact_${channel}_raw
+    internal: true
+    pin:
+      number: ${contact_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+  - platform: template
+    id: contact_${channel}
+    name: Contact ${channel} - ${contact_label}
+    icon: mdi:electric-switch
+    # A simulated closure joins the real input before debounce, so the UI,
+    # local mappings, and network events all see the same sensor edges.
+    lambda: |-
+      if (!id(contact_${channel}_raw).has_state())
+        return {};
+      return id(contact_${channel}_raw).state || id(simulate_contact_${channel}_pulse).is_running();
+    filters:
+      - delayed_on_off: ${contact_debounce}
+      # Accept a trip promptly, then drop further trips for one second.
+      # Releases always pass. Ignored trips are never delayed or queued.
+      - lambda: |-
+          static controller_events::SensorTriggerLimiter limiter;
+          if (!x || !id(contact_${channel}).has_state() || limiter.accept(millis()))
+            return x;
+          return {};
+    # Share only new debounced edges, including contacts without a local rule.
+    trigger_on_initial_state: false
+    # Root on_press actions merge after this broadcast, so the contact event
+    # is sent before a resulting local sequence.started event.
+    on_press:
+      - script.execute:
+          id: controller_broadcast_event
+          event: sensor.triggered
+          item: ${channel}
+          reason: ""
+    on_release:
+      - script.execute:
+          id: controller_broadcast_event
+          event: sensor.released
+          item: ${channel}
+          reason: ""
+    web_server:
+      sorting_group_id: contacts_group
+      sorting_weight: ${channel}
+
+button:
+  - platform: template
+    id: simulate_contact_${channel}
+    name: Test Contact ${channel} - ${contact_label}
+    icon: mdi:gesture-tap-button
+    on_press:
+      - script.execute: simulate_contact_${channel}_pulse
+    web_server:
+      sorting_group_id: contacts_group
+      sorting_weight: ${channel}.5
+
+
+switch:
+  - platform: gpio
+    id: relay_${channel}
+    name: Relay ${channel} Manual
+    icon: mdi:electric-switch
+    pin:
+      number: ${relay_pin}
+      inverted: false
+    restore_mode: ALWAYS_OFF
+    web_server:
+      sorting_group_id: relays_group
+      sorting_weight: ${channel}
+
+number:
+  - platform: template
+    id: pulse_${channel}_seconds
+    name: Relay ${channel} ON Duration
+    icon: mdi:timer-outline
+    unit_of_measurement: s
+    mode: box
+    min_value: 0.1
+    max_value: 600
+    step: 0.1
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    web_server:
+      sorting_group_id: timing_group
+
+
+script:
+  # Hold a virtual closure through the debounce window, plus a polling margin.
+  # Repeated clicks extend the closure; a real held input remains ON afterward.
+  - id: simulate_contact_${channel}_pulse
+    mode: restart
+    then:
+      - delay: ${contact_debounce}
+      - delay: 100ms
+
+  # Internal sequence timer. The parent turns the relay ON and starts this
+  # timer with a snapshot of its configured ON duration. Separate timers
+  # let multiple relays turn OFF independently while sharing one sequence.
+  - id: relay_${channel}_sequence_timer
+    mode: single
+    parameters:
+      duration_ms: int
+    then:
+      - delay: !lambda return duration_ms;
+      - switch.turn_off: relay_${channel}

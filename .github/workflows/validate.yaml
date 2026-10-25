@@ -1,0 +1,22 @@
+name: Validate controller configuration
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Native protocol and sensor limiter tests
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined -I . tests/controller-events-test.cpp -o /tmp/controller-events-test
+          /tmp/controller-events-test
+      - name: Validate and generate all entry points with disposable credentials
+        run: python tests/validate-release.py --generate

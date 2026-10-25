@@ -1,0 +1,185 @@
+# Shared original ESP32 T-Relay hardware, networking, and common controls.
+# No prop routines or local contact mappings are installed by this framework.
+substitutions:
+  contact_debounce: 50ms
+  # Controllers override these labels alongside their contact mappings.
+  contact_1_label: Unassigned
+  contact_2_label: Unassigned
+  contact_3_label: Unassigned
+  contact_4_label: Unassigned
+  startup_relay_check_enabled: "true"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  min_version: 2026.10.0
+  on_boot:
+    # Run after relay GPIO initialization (priority 800), without waiting
+    # for Wi-Fi or Home Assistant. Script delays do not block networking.
+    priority: 600
+    then:
+      - if:
+          condition:
+            lambda: return ${startup_relay_check_enabled};
+          then:
+            - script.execute: startup_relay_check
+
+esp32:
+  variant: esp32
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret halloween_api_encryption_key
+  outgoing_connection:
+    host: !secret ha_ip
+    port: !secret ha_api_port
+    delay: 30s
+  # Local sequences keep running if Home Assistant is unavailable.
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+    # Reuse the API key for encrypted, authenticated firmware updates.
+    encryption:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  reboot_timeout: 0s
+  ap:
+    ssid: Halloween Controller Setup
+    password: !secret halloween_ap_password
+
+captive_portal:
+
+# Optional: remove this block and the web_server sections in the channel
+# package if you do not want the local browser interface.
+# Password-free by default; controllers can opt in with web_server.auth.
+web_server:
+  port: 80
+  version: 3
+  local: true
+  # Disable normal web UI uploads; captive-portal recovery still permits HTTP.
+  ota: false
+  sorting_groups:
+    - id: contacts_group
+      name: Contact Inputs
+      sorting_weight: 10
+    - id: sequences_group
+      name: Sequences
+      sorting_weight: 20
+    - id: relays_group
+      name: Manual Relay Controls
+      sorting_weight: 30
+    - id: timing_group
+      name: Timing
+      sorting_weight: 40
+
+packages:
+  controller_events: !include controller-events.yaml
+  channel_1: !include
+    file: relay-channel.yaml
+    vars:
+      channel: "1"
+      contact_label: ${contact_1_label}
+      relay_pin: GPIO21
+      contact_pin: GPIO26
+  channel_2: !include
+    file: relay-channel.yaml
+    vars:
+      channel: "2"
+      contact_label: ${contact_2_label}
+      relay_pin: GPIO19
+      contact_pin: GPIO27
+  channel_3: !include
+    file: relay-channel.yaml
+    vars:
+      channel: "3"
+      contact_label: ${contact_3_label}
+      relay_pin: GPIO18
+      contact_pin: GPIO32
+  channel_4: !include
+    file: relay-channel.yaml
+    vars:
+      channel: "4"
+      contact_label: ${contact_4_label}
+      relay_pin: GPIO5
+      contact_pin: GPIO33
+
+script:
+  # Controller files extend this synchronous hook to cancel their routines.
+  # Stop All calls it before canceling relay timers and switching outputs OFF.
+  - id: controller_stop_sequences
+    mode: single
+    then:
+      - lambda: return;
+
+  - id: startup_relay_check
+    mode: single
+    then:
+      - switch.turn_on: relay_1
+      - delay: 1s
+      - switch.turn_on: relay_2
+      - delay: 1s
+      - switch.turn_on: relay_3
+      - delay: 1s
+      - switch.turn_on: relay_4
+      - delay: 1s
+      - switch.turn_off: relay_1
+      - delay: 1s
+      - switch.turn_off: relay_2
+      - delay: 1s
+      - switch.turn_off: relay_3
+      - delay: 1s
+      - switch.turn_off: relay_4
+
+button:
+  - platform: template
+    id: stop_all
+    name: Stop All
+    icon: mdi:stop-circle
+    on_press:
+      - script.stop: startup_relay_check
+      - script.stop: simulate_contact_1_pulse
+      - script.stop: simulate_contact_2_pulse
+      - script.stop: simulate_contact_3_pulse
+      - script.stop: simulate_contact_4_pulse
+      - script.execute: controller_stop_sequences
+      - script.stop: relay_1_sequence_timer
+      - script.stop: relay_2_sequence_timer
+      - script.stop: relay_3_sequence_timer
+      - script.stop: relay_4_sequence_timer
+      - switch.turn_off: relay_1
+      - switch.turn_off: relay_2
+      - switch.turn_off: relay_3
+      - switch.turn_off: relay_4
+      - script.execute: controller_sequences_stopped
+  - platform: restart
+    name: Restart Controller
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: status
+    name: Controller Connected
+    entity_category: diagnostic
+
+sensor:
+  - platform: wifi_signal
+    name: WiFi Signal
+    update_interval: 60s
+    entity_category: diagnostic
+  - platform: uptime
+    name: Uptime
+    entity_category: diagnostic
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: IP Address
+      entity_category: diagnostic

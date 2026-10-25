@@ -1,0 +1,14 @@
+# Reusable receiver rule. Include once per mapping with a unique package key.
+# Required include vars: remote_source, remote_event, remote_item,
+# remote_reason (empty for sensor/start/cooldown events), local_trigger.
+script:
+  - id: !extend controller_handle_event
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return source == "${remote_source}" &&
+                     event == "${remote_event}" && item == ${remote_item} &&
+                     reason == "${remote_reason}";
+          then:
+            - button.press: ${local_trigger}

@@ -1,0 +1,157 @@
+# Controller 3: Fog on K1; fires 15s after Controller 1 Sequence 1 starts.
+# Uses the original four-relay ESP32 LILYGO T-Relay and shared secrets.yaml.
+# Trigger Fog runs K1 for Fog Duration (default 10s), then Fog Cooldown (10s).
+substitutions:
+  device_name: prop-controller-3
+  friendly_name: Halloween Controller 3
+  # Run the relay check during boot/restart.
+  startup_relay_check_enabled: "true"
+
+packages:
+  controller: !include packages/controller-framework.yaml
+
+# Future local trigger: uncomment to assign Contact 1 (GPIO26 to GND).
+# binary_sensor:
+#   - id: !extend contact_1
+#     trigger_on_initial_state: false
+#     on_press:
+#       - script.execute:
+#           id: sequence_1
+#           start_delay_ms: 0
+# Merge that entry into the binary_sensor list below if enabling it.
+
+# Manual Trigger Fog fires immediately; the remote rule uses a delayed start.
+# Contacts remain unassigned and only log/broadcast their edges.
+button:
+  - platform: template
+    id: trigger_1
+    name: Trigger Fog
+    icon: mdi:play-circle
+    on_press:
+      - script.execute:
+          id: sequence_1
+          start_delay_ms: 0
+    web_server:
+      sorting_group_id: sequences_group
+      sorting_weight: 1
+
+binary_sensor:
+  - platform: template
+    id: sequence_1_busy
+    name: Fog Busy
+    icon: mdi:timer-sand
+    lambda: return id(sequence_1).is_running();
+    web_server:
+      sorting_group_id: sequences_group
+
+  - platform: template
+    id: sequence_1_cooling_down
+    name: Fog Cooling Down
+    icon: mdi:timer-lock-outline
+    lambda: return id(sequence_1_cooldown).is_running();
+    web_server:
+      sorting_group_id: sequences_group
+
+switch:
+  - id: !extend relay_1
+    name: Relay 1 (Fog)
+
+number:
+  - id: !extend pulse_1_seconds
+    name: Fog Duration
+    initial_value: 10
+
+  - platform: template
+    id: cooldown_1_seconds
+    name: Fog Cooldown
+    icon: mdi:timer-lock-outline
+    unit_of_measurement: s
+    mode: box
+    min_value: 0
+    max_value: 600
+    step: 1
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    web_server:
+      sorting_group_id: timing_group
+
+script:
+  # Only accepted starts trigger fog; raw contact edges and other boards do not.
+  - id: !extend controller_handle_event
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return source == "prop-controller-1" &&
+                     event == "sequence.started" && item == 1 &&
+                     reason.empty();
+          then:
+            - script.execute:
+                id: sequence_1
+                start_delay_ms: 15000
+
+  - id: !extend controller_stop_sequences
+    then:
+      - script.stop: sequence_1
+      - script.stop: sequence_1_cooldown
+
+  - id: sequence_1
+    mode: single
+    parameters:
+      start_delay_ms: int
+    then:
+      - if:
+          condition:
+            not:
+              script.is_running: startup_relay_check
+          then:
+            # Busy includes this delay, so retriggers cannot queue another run.
+            # Local Stop All cancels the pending activation with this script.
+            - delay: !lambda return start_delay_ms;
+            - switch.turn_on: relay_1
+            - script.execute:
+                id: relay_1_sequence_timer
+                duration_ms: !lambda return (int) (id(pulse_1_seconds).state * 1000.0f);
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.started
+                item: 1
+                reason: ""
+            - script.wait: relay_1_sequence_timer
+            - script.execute:
+                id: sequence_1_cooldown
+                duration_ms: !lambda return (int) (id(cooldown_1_seconds).state * 1000.0f);
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.cooling_down
+                item: 1
+                reason: ""
+            - script.wait: sequence_1_cooldown
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.ready
+                item: 1
+                reason: cooldown_finished
+          else:
+            - logger.log: "Fog ignored during startup relay check"
+
+  - id: sequence_1_cooldown
+    mode: single
+    parameters:
+      duration_ms: int
+    then:
+      - delay: !lambda return duration_ms;
+
+# The source is a network sequence start; local contacts are unassigned.
+text_sensor:
+  - platform: template
+    id: fog_trigger_description
+    name: Fog Trigger
+    icon: mdi:transit-connection-variant
+    lambda: return {"Controller 1 Fog; wait 15s; K1 Fog"};
+    update_interval: 1s
+    web_server:
+      sorting_group_id: sequences_group
+      sorting_weight: 0

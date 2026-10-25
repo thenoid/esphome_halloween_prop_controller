@@ -1,0 +1,95 @@
+# Shared fire-and-forget event bus. No host/IP list, ACKs, retries, or queue.
+# Requires the root device_name substitution and controller-events.h alongside
+# the other packages. Extend controller_handle_event for local receiver rules.
+substitutions:
+  controller_event_port: "18512"
+
+esphome:
+  includes:
+    - packages/controller-events.h
+
+globals:
+  # Tracks accepted local sequences, even if Wi-Fi is down. Never restored.
+  - id: controller_active_sequences
+    type: uint8_t
+    restore_value: false
+    initial_value: "0"
+
+udp:
+  id: controller_event_udp
+  port: ${controller_event_port}
+  addresses:
+    - 255.255.255.255
+  on_receive:
+    - lambda: |-
+        if (data.empty() || data.size() > controller_events::MAX_PACKET_SIZE)
+          return;
+        controller_events::Event message;
+        if (!controller_events::decode(std::string(data.begin(), data.end()), message) ||
+            message.source == "${device_name}")
+          return;
+        ESP_LOGD("controller_events", "RX %s %s %d %s", message.source.c_str(),
+                 message.event.c_str(), message.item, message.reason.c_str());
+        id(controller_handle_event).execute(message.source, message.event, message.item, message.reason);
+
+script:
+  - id: controller_broadcast_event
+    mode: parallel
+    parameters:
+      event: string
+      item: int
+      reason: string
+    then:
+      - if:
+          condition:
+            lambda: return controller_events::valid_event({"${device_name}", event, item, reason});
+          then:
+            - lambda: |-
+                const uint8_t bit = 1U << (item - 1);
+                if (event == "sequence.started")
+                  id(controller_active_sequences) |= bit;
+                else if (event == "sequence.ready")
+                  id(controller_active_sequences) &= ~bit;
+            - if:
+                condition:
+                  wifi.connected:
+                then:
+                  - udp.write:
+                      id: controller_event_udp
+                      data: !lambda |-
+                        const auto packet = controller_events::encode({"${device_name}", event, item, reason});
+                        ESP_LOGD("controller_events", "TX %s", packet.c_str());
+                        return std::vector<uint8_t>(packet.begin(), packet.end());
+          else:
+            - logger.log:
+                level: WARN
+                format: "Invalid local controller event ignored"
+
+  # Call AFTER stopping scripts and switching outputs OFF. Only interrupted
+  # sequences emit ready/stopped; pressing Stop All while idle emits nothing.
+  - id: controller_sequences_stopped
+    mode: single
+    then:
+      - lambda: |-
+          const uint8_t active = id(controller_active_sequences);
+          for (int item = 1; item <= 4; item++) {
+            if (active & (1U << (item - 1)))
+              id(controller_broadcast_event).execute("sequence.ready", item, "stopped");
+          }
+
+  # Keep handlers short: match an event, then execute a local sequence/button.
+  # No automatic forwarding. Unknown/malformed packets and own echoes never
+  # reach this hook. The default receives/logs events without running props.
+  - id: controller_handle_event
+    mode: parallel
+    parameters:
+      source: string
+      event: string
+      item: int
+      reason: string
+    then:
+      - lambda: |-
+          (void) source;
+          (void) event;
+          (void) item;
+          (void) reason;

@@ -1,0 +1,2 @@
+# Version used to validate this release. Install in a virtual environment.
+esphome==2026.10.0

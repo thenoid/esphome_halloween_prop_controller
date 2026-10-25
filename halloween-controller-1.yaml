@@ -1,0 +1,269 @@
+# Controller 1: reusable board framework; all prop routines/mappings live here.
+# Copy secrets.example.yaml to secrets.yaml and fill in your credentials.
+substitutions:
+  device_name: prop-controller-1
+  friendly_name: Halloween Controller 1
+  contact_debounce: 50ms
+  contact_1_label: Fog
+  contact_2_label: BIG Spider
+  # This cycles the actual relay contacts on every normal boot/restart.
+  startup_relay_check_enabled: "true"
+
+packages:
+  controller: !include packages/controller-framework.yaml
+
+# Optional remote rules: include packages/remote-event-trigger.yaml once per
+# mapping, or extend controller_handle_event here. See the Controller 2 example.
+
+# Controller 1 routines: Fog (K3) and BIG Spider (K2).
+
+script:
+  # Sequence 1: Contact 1 and its manual button share this script/cooldown.
+  - id: sequence_1
+    mode: single
+    # Snapshot the fog duration when triggered; edits apply to the next run.
+    parameters:
+      fog_duration_ms: int
+    then:
+      - if:
+          condition:
+            not:
+              script.is_running: startup_relay_check
+          then:
+            # t=0: start fog and its independent OFF timer. Energizing K3
+            # opens COM-NC. Announce the accepted sequence at the fog start.
+            - switch.turn_on: relay_3
+            - script.execute:
+                id: relay_3_sequence_timer
+                duration_ms: !lambda return fog_duration_ms;
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.started
+                item: 1
+                reason: ""
+            # Fog switches OFF independently of the remote fog delay.
+            - script.wait: relay_3_sequence_timer
+            - script.execute:
+                id: sequence_1_cooldown
+                duration_ms: !lambda return (int) (id(cooldown_1_seconds).state * 1000.0f);
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.cooling_down
+                item: 1
+                reason: ""
+            - script.wait: sequence_1_cooldown
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.ready
+                item: 1
+                reason: cooldown_finished
+          else:
+            - logger.log: "Fog ignored during startup relay check"
+
+  # Separate cooldown script lets the UI report this phase explicitly.
+  - id: sequence_1_cooldown
+    mode: single
+    parameters:
+      duration_ms: int
+    then:
+      - delay: !lambda return duration_ms;
+
+  # Stop All cancels both local routines before timers/output shutdown.
+  - id: !extend controller_stop_sequences
+    then:
+      - script.stop: sequence_2
+      - script.stop: sequence_2_cooldown
+      - script.stop: sequence_1
+      - script.stop: sequence_1_cooldown
+
+  # Sequence 2: BIG Spider on K2; Contact 2 and its button share cooldown.
+  - id: sequence_2
+    mode: single
+    then:
+      - if:
+          condition:
+            not:
+              script.is_running: startup_relay_check
+          then:
+            - switch.turn_on: relay_2
+            - script.execute:
+                id: relay_2_sequence_timer
+                duration_ms: !lambda return (int) (id(pulse_2_seconds).state * 1000.0f);
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.started
+                item: 2
+                reason: ""
+            - script.wait: relay_2_sequence_timer
+            - script.execute:
+                id: sequence_2_cooldown
+                duration_ms: !lambda return (int) (id(cooldown_2_seconds).state * 1000.0f);
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.cooling_down
+                item: 2
+                reason: ""
+            - script.wait: sequence_2_cooldown
+            - script.execute:
+                id: controller_broadcast_event
+                event: sequence.ready
+                item: 2
+                reason: cooldown_finished
+          else:
+            - logger.log: "Sequence 2 ignored during startup relay check"
+
+  - id: sequence_2_cooldown
+    mode: single
+    parameters:
+      duration_ms: int
+    then:
+      - delay: !lambda return duration_ms;
+
+button:
+  - platform: template
+    id: trigger_2
+    name: Trigger BIG Spider
+    icon: mdi:play-circle
+    on_press:
+      - script.execute: sequence_2
+    web_server:
+      sorting_group_id: sequences_group
+      sorting_weight: 2
+
+
+  - platform: template
+    id: trigger_1
+    name: Trigger Fog
+    icon: mdi:play-circle
+    on_press:
+      - script.execute:
+          id: sequence_1
+          fog_duration_ms: !lambda return (int) (id(fog_machine_duration).state * 1000.0f);
+    web_server:
+      sorting_group_id: sequences_group
+      sorting_weight: 1
+
+binary_sensor:
+  - id: !extend contact_1
+    trigger_on_initial_state: false
+    on_press:
+      - script.execute:
+          id: sequence_1
+          fog_duration_ms: !lambda return (int) (id(fog_machine_duration).state * 1000.0f);
+  - id: !extend contact_2
+    trigger_on_initial_state: false
+    on_press:
+      - script.execute: sequence_2
+  - platform: template
+    id: sequence_1_busy
+    name: Fog Busy
+    icon: mdi:timer-sand
+    lambda: return id(sequence_1).is_running();
+    web_server:
+      sorting_group_id: sequences_group
+  - platform: template
+    id: sequence_2_busy
+    name: BIG Spider Busy
+    icon: mdi:timer-sand
+    lambda: return id(sequence_2).is_running();
+    web_server:
+      sorting_group_id: sequences_group
+
+  - platform: template
+    id: sequence_2_cooling_down
+    name: BIG Spider Cooling Down
+    icon: mdi:timer-lock-outline
+    lambda: return id(sequence_2_cooldown).is_running();
+    web_server:
+      sorting_group_id: sequences_group
+
+  - platform: template
+    id: sequence_1_cooling_down
+    name: Fog Cooling Down
+    icon: mdi:timer-lock-outline
+    lambda: return id(sequence_1_cooldown).is_running();
+    web_server:
+      sorting_group_id: sequences_group
+
+switch:
+  - id: !extend relay_2
+    name: Relay 2 (BIG Spider)
+  - id: !extend relay_3
+    name: Relay 3 (Fog)
+
+number:
+  # Keep K3's existing internal ID; shorten the labels shown in the UI.
+  - id: !remove pulse_3_seconds
+  - platform: template
+    id: cooldown_1_seconds
+    name: Fog Cooldown
+    icon: mdi:timer-lock-outline
+    unit_of_measurement: s
+    mode: box
+    min_value: 0
+    max_value: 600
+    step: 1
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    web_server:
+      sorting_group_id: timing_group
+
+  - platform: template
+    id: cooldown_2_seconds
+    name: BIG Spider Cooldown
+    icon: mdi:timer-lock-outline
+    unit_of_measurement: s
+    mode: box
+    min_value: 0
+    max_value: 600
+    step: 1
+    initial_value: 25
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    web_server:
+      sorting_group_id: timing_group
+
+
+  - id: !extend pulse_2_seconds
+    name: BIG Spider Duration
+    initial_value: 1
+  - platform: template
+    id: fog_machine_duration
+    name: Fog Duration
+    icon: mdi:timer-outline
+    unit_of_measurement: s
+    mode: box
+    min_value: 0.1
+    max_value: 600
+    step: 0.1
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    web_server:
+      sorting_group_id: timing_group
+
+# Read-only sequence descriptions appear beside the contact/test rows.
+text_sensor:
+  - platform: template
+    id: contact_1_sequence_description
+    name: Contact 1 Sequence
+    icon: mdi:transit-connection-variant
+    lambda: return {"K3 Fog now; Controller 3 Fog after 15s"};
+    update_interval: 1s
+    web_server:
+      sorting_group_id: contacts_group
+      sorting_weight: 1.75
+
+  - platform: template
+    id: contact_2_sequence_description
+    name: Contact 2 Sequence
+    icon: mdi:transit-connection-variant
+    lambda: return {"K2 BIG Spider now; Controller 2 Fog after 3.5s"};
+    update_interval: 1s
+    web_server:
+      sorting_group_id: contacts_group
+      sorting_weight: 2.75
