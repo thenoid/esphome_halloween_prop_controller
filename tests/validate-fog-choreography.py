@@ -109,7 +109,14 @@ for path in paths:
         delay_ms, relay = 0, "relay_3"
     else:
         source_item, delay_ms = {"prop-controller-2": (2, 3500), "prop-controller-3": (1, 15000)}[device]
-        check_sequence(scripts, 1, (1,))
+        fog_relay = 4 if device == "prop-controller-2" else 1
+        check_sequence(scripts, 1, (fog_relay,))
+        switches = by_id(config, "switch")
+        assert switches[f"relay_{fog_relay}"]["pin"]["number"] == (5 if fog_relay == 4 else 21)
+        assert switches[f"relay_{fog_relay}"]["name"] == f"Relay {fog_relay} (Fog)"
+        assert by_id(config, "number")["pulse_1_seconds"]["name"] == "Fog Duration"
+        description = str(by_id(config, "text_sensor")["fog_trigger_description"]["lambda"])
+        assert f"K{fog_relay} Fog" in description
         rules = scripts["controller_handle_event"]["then"]
         assert len(rules) == 2
         rule = rules[-1]["if"]
@@ -127,7 +134,8 @@ for path in paths:
         assert "id(sequence_1).is_running()" in str(sensors["sequence_1_busy"]["lambda"])
         for channel in (1, 2, 3, 4):
             assert len(sensors[f"contact_{channel}"]["on_press"][0]["then"]) == 1
-        relay = "relay_1"
+        relay = f"relay_{fog_relay}"
+        assert [str(step["switch.turn_on"]["id"]) for step in steps if "switch.turn_on" in step] == [relay]
     for start_ms in sorted({0, delay_ms}):
         for fog_ms, cooldown_ms in ((100, 0), (2000, 10000), (10000, 10000), (600000, 600000)):
             trace, ready_ms = fog_timeline(scripts, fog_ms, cooldown_ms, start_ms)
