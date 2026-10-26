@@ -12,10 +12,10 @@ The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/X
 
 | Function | GPIO | Connection / behavior |
 | --- | --- | --- |
-| K1 relay | 21 | Active HIGH; fog on controller 3 |
+| K1 relay | 21 | Active HIGH; fog on controllers 2 and 3 |
 | K2 relay | 19 | Active HIGH; BIG Spider on controller 1 |
 | K3 relay | 18 | Active HIGH; fog on controller 1 |
-| K4 relay | 5 | Active HIGH; fog on controller 2; onboard strapping-pin connection |
+| K4 relay | 5 | Active HIGH; spare manual output; onboard strapping-pin connection |
 | Contact 1 | 26 | Voltage-free contact between GPIO26 and board GND |
 | Contact 2 | 27 | Voltage-free contact between GPIO27 and board GND |
 | Contact 3 | 32 | Voltage-free contact between GPIO32 and board GND |
@@ -23,7 +23,7 @@ The output assignments match [LILYGO's ESPHome pin mapping](https://github.com/X
 
 Use GPIO labels, not header position numbers. Inputs use internal pull-ups and inverted logic: closed = ON. GPIO25 drives the onboard LED and is not an input. Unused inputs may remain open. Long outdoor leads need suitable input protection and pull-ups for the installation. **These are bare 3.3 V GPIO inputs**: never connect a powered 5/12/24 V sensor output directly. Relay optocouplers do not isolate these inputs.
 
-The fog machine's original **normally open manual button remains connected**. In this build, the relay's **COM and NO leads are soldered onto the same two contacts on the back of that button**, placing the relay in parallel with it. Use K3 on controller 1, K4 on controller 2, and K1 on controller 3; leave NC unused for these fog triggers. With the relay OFF, COM–NO is open. During a fog sequence, the relay energizes and closes COM–NO for `Fog Duration` (default 10 seconds), simulating a held button press; it then releases and opens COM–NO again. The original button can still close the circuit independently of the controller's timers, cooldowns and Stop All. The relay contacts provide a switch closure, not a 12–24 V power output. They are separate from the controller's GPIO contact inputs.
+The fog machine's original **normally open manual button remains connected**. In this build, the relay's **COM and NO leads are soldered onto the same two contacts on the back of that button**, placing the relay in parallel with it. Use K3 on controller 1 and K1 on controllers 2 and 3; leave NC unused for these fog triggers. With the relay OFF, COM–NO is open. During a fog sequence, the relay energizes and closes COM–NO for `Fog Duration` (default 10 seconds), simulating a held button press; it then releases and opens COM–NO again. The original button can still close the circuit independently of the controller's timers, cooldowns and Stop All. The relay contacts provide a switch closure, not a 12–24 V power output. They are separate from the controller's GPIO contact inputs.
 
 Confirm the prop's trigger voltage, current and required button-hold duration before connecting it. Firmware ON/OFF describes the relay coil, not whether a prop is safe. Do not assume a fog-machine remote is low voltage; have its interface verified before connecting it.
 
@@ -34,11 +34,9 @@ Confirm the prop's trigger voltage, current and required button-hold duration be
 | Entry point | Example device name | Local behavior | Remote behavior |
 | --- | --- | --- | --- |
 | `halloween-controller-1.yaml` | `prop-controller-1` | Contact 1: K3 fog, 10 s ON + 10 s cooldown. Contact 2: K2 BIG Spider, 1 s ON + 25 s cooldown. | Accepted fog start triggers controller 3 after 15 s; accepted spider start triggers controller 2 after 3.5 s. |
-| `halloween-controller-2.yaml` | `prop-controller-2` | K4 fog, 10 s ON + 10 s cooldown; local contacts unassigned. | Waits 3.5 s after controller 1 Sequence 2 starts. |
+| `halloween-controller-2.yaml` | `prop-controller-2` | K1 fog, 10 s ON + 10 s cooldown; local contacts unassigned. | Waits 3.5 s after controller 1 Sequence 2 starts. |
 | `halloween-controller-3.yaml` | `prop-controller-3` | K1 fog, 10 s ON + 10 s cooldown; local contacts unassigned. | Waits 15 s after controller 1 Sequence 1 starts. |
 | `controller.example.yaml` | `prop-controller-4` | Hardware-only starter: manual relays, contacts and event bus, no prop routines. Startup relay check disabled. | Receives/logs events without running a prop. |
-
-Controller 2 now uses K4 (GPIO5); its existing Fog Duration setting is retained when updating from the K1 configuration.
 
 `halloween-controller.yaml` is a compatibility alias for controller 1. Flash one entry point per board; use the canonical numbered files for new installations.
 
@@ -114,7 +112,7 @@ With all prop loads disconnected:
 
 1. Check each board's startup pattern ends with all relays OFF, or that no relay energizes if you disabled the check. Compare physical contacts with UI ON/OFF states.
 2. Controller 1 Contact 1 / **Trigger Fog**: only K3 runs at t=0–10 s. Controller 3 K1 runs at about t=15–25 s; controller 2 stays idle.
-3. Controller 1 Contact 2 / **Trigger BIG Spider**: K2 runs at t=0–1 s. Controller 2 K4 runs at about t=3.5–13.5 s; controller 3 stays idle.
+3. Controller 1 Contact 2 / **Trigger BIG Spider**: K2 runs at t=0–1 s. Controller 2 K1 runs at about t=3.5–13.5 s; controller 3 stays idle.
 4. Repeat with **Test Contact** buttons. Confirm held contacts do not repeat, inputs closed at boot do not trigger, and independent trip limits/cooldowns discard retriggers. Receiver contacts remain unassigned.
 5. Press each receiver's local **Stop All** during its pending delay, active output and cooldown. The canceled delay must not fire later. Check immediate manual sequence starts when idle, and cancellation of the startup check and simulations.
 6. Change settings, reboot and verify persistence. Try a 2 s source fog duration: controller 3 still starts 15 s after its accepted start. Check disconnected Wi-Fi leaves local timing working with no replay after reconnection. Inspect `controller_events` TX/RX logs privately if a receiver does not respond.

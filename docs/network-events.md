@@ -19,7 +19,7 @@ HC1|prop-controller-2|sequence.ready|1|cooldown_finished
 | `sequence.ready` | Source sequence 1–4 | `cooldown_finished` | Normal completion |
 | `sequence.ready` | Source sequence 1–4 | `stopped` | Active/cooling sequence interrupted by local Stop All |
 
-Sequence numbers are independent of relay numbers. On controller 1, Sequence 1 is K3 Fog and Sequence 2 is K2 BIG Spider. On receivers, Sequence 1 is K4 Fog on controller 2 and K1 Fog on controller 3. Stop All while idle emits no sequence event. Stopping a pending remote delay occurs before that receiver has announced a started event, so it emits no corresponding ready/stopped event. Manual switches and startup checks do not emit lifecycle events.
+Sequence numbers are independent of relay numbers. On controller 1, Sequence 1 is K3 Fog and Sequence 2 is K2 BIG Spider. On receivers, Sequence 1 is K1 Fog. Stop All while idle emits no sequence event. Stopping a pending remote delay occurs before that receiver has announced a started event, so it emits no corresponding ready/stopped event. Manual switches and startup checks do not emit lifecycle events.
 
 Contacts share real/simulated input paths, 50 ms debounce and per-input one-second trip limits. A held or boot-closed contact does not repeatedly trigger. Sequence events and incoming packets have no one-second trip limiter. Busy sequences discard new triggers; they never queue them.
 

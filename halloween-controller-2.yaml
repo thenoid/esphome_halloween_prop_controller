@@ -1,6 +1,6 @@
-# Controller 2: Fog on K4; fires 3.5s after Controller 1 Sequence 2 starts.
+# Controller 2: Fog on K1; fires 3.5s after Controller 1 Sequence 2 starts.
 # Uses the original four-relay ESP32 LILYGO T-Relay and shared secrets.yaml.
-# Trigger Fog runs K4 for Fog Duration (default 10s), then Fog Cooldown (10s).
+# Trigger Fog runs K1 for Fog Duration (default 10s), then Fog Cooldown (10s).
 substitutions:
   device_name: prop-controller-2
   friendly_name: Halloween Controller 2
@@ -53,11 +53,10 @@ binary_sensor:
       sorting_group_id: sequences_group
 
 switch:
-  - id: !extend relay_4
-    name: Relay 4 (Fog)
+  - id: !extend relay_1
+    name: Relay 1 (Fog)
 
 number:
-  # Keep the existing Fog Duration setting when moving the output to K4.
   - id: !extend pulse_1_seconds
     name: Fog Duration
     initial_value: 10
@@ -111,16 +110,16 @@ script:
             # Busy includes this delay, so retriggers cannot queue another run.
             # Local Stop All cancels the pending activation with this script.
             - delay: !lambda return start_delay_ms;
-            - switch.turn_on: relay_4
+            - switch.turn_on: relay_1
             - script.execute:
-                id: relay_4_sequence_timer
+                id: relay_1_sequence_timer
                 duration_ms: !lambda return (int) (id(pulse_1_seconds).state * 1000.0f);
             - script.execute:
                 id: controller_broadcast_event
                 event: sequence.started
                 item: 1
                 reason: ""
-            - script.wait: relay_4_sequence_timer
+            - script.wait: relay_1_sequence_timer
             - script.execute:
                 id: sequence_1_cooldown
                 duration_ms: !lambda return (int) (id(cooldown_1_seconds).state * 1000.0f);
@@ -151,7 +150,7 @@ text_sensor:
     id: fog_trigger_description
     name: Fog Trigger
     icon: mdi:transit-connection-variant
-    lambda: return {"Controller 1 BIG Spider; wait 3.5s; K4 Fog"};
+    lambda: return {"Controller 1 BIG Spider; wait 3.5s; K1 Fog"};
     update_interval: 1s
     web_server:
       sorting_group_id: sequences_group
