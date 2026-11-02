@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Controller event archive</title>
+  <link rel="stylesheet" href="/ui/style.css"><script src="/ui/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">HALLOWEEN CONTROLLERS</p><h1>Event archive</h1>
+      <p>One timeline for every controller. Times shown in your browser’s timezone.</p></div>
+      <a href="/docs" target="_blank" rel="noopener">API documentation ↗</a></header>
+    <form id="connection" class="panel connection">
+      <label>API token<input id="token" type="password" autocomplete="off" required placeholder="Paste collector token"></label>
+      <button type="submit">Connect</button><span class="muted">Token stays in this page’s memory.</span>
+    </form>
+    <p id="message" role="status" aria-live="polite">Connect to load the archive.</p>
+    <section class="metrics" aria-label="Collection health">
+      <article><span>Collector</span><strong id="health">—</strong></article>
+      <article><span>Archived events</span><strong id="stored">—</strong></article>
+      <article><span>Controllers in archive</span><strong id="controllers">—</strong></article>
+      <article><span>Last stored receipt</span><strong id="last" class="small">—</strong></article>
+    </section>
+    <form id="filters" class="panel filters">
+      <label>Controller<select id="source"><option value="">All controllers</option></select></label>
+      <label>Event<select id="event"><option value="">All events</option>
+        <option>sensor.triggered</option><option>sensor.released</option><option>sequence.started</option>
+        <option>sequence.cooling_down</option><option>sequence.ready</option></select></label>
+      <label>Item<select id="item"><option value="">All items</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+      <label>From<input id="since" type="datetime-local" step="1"></label>
+      <label>Until (exclusive)<input id="until" type="datetime-local" step="1"></label>
+      <button type="submit">Apply filters</button>
+    </form>
+    <div class="toolbar"><label class="check"><input id="auto" type="checkbox" checked> Refresh every 5 seconds</label>
+      <button id="export" type="button" class="secondary">Export newest 1,000 CSV</button></div>
+    <div class="table-wrap panel"><table>
+      <thead><tr><th>Received</th><th>Controller</th><th>Event</th><th>Item</th><th>Reason</th><th>ID</th></tr></thead>
+      <tbody id="events"><tr><td colspan="6" class="empty">No archive loaded.</td></tr></tbody>
+    </table></div>
+    <footer><span id="count">0 shown</span><button id="older" type="button" disabled class="secondary">Load older events</button></footer>
+    <p class="note">This archive records best-effort network observations. Missing events do not prove inactivity;
+      a sequence event does not confirm physical prop operation. Last-seen times do not establish controller connectivity.</p>
+  </main>
+</body></html>

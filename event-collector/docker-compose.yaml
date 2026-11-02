@@ -1,0 +1,34 @@
+services:
+  collector:
+    build: .
+    image: controller-event-collector:local
+    # Native Linux Docker Engine: receive LAN broadcasts without NAT.
+    network_mode: host
+    environment:
+      COLLECTOR_API_TOKEN: ${COLLECTOR_API_TOKEN:?Set COLLECTOR_API_TOKEN in .env first}
+      COLLECTOR_DATABASE: /data/events.sqlite3
+      COLLECTOR_HTTP_HOST: ${COLLECTOR_HTTP_HOST:-0.0.0.0}
+      COLLECTOR_HTTP_PORT: ${COLLECTOR_HTTP_PORT:-8080}
+      COLLECTOR_UDP_HOST: ${COLLECTOR_UDP_HOST:-0.0.0.0}
+      COLLECTOR_UDP_PORT: ${COLLECTOR_UDP_PORT:-18512}
+      COLLECTOR_RETENTION_DAYS: ${COLLECTOR_RETENTION_DAYS:-90}
+      COLLECTOR_QUEUE_SIZE: ${COLLECTOR_QUEUE_SIZE:-4096}
+    volumes:
+      - collector-data:/data
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  collector-data:

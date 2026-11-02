@@ -1,0 +1,7 @@
+# Allowlist: never send credentials, archives or the parent repository to Docker.
+**
+!requirements.txt
+!collector/
+!collector/**
+**/__pycache__/
+**/*.pyc

@@ -1,0 +1,41 @@
+name: Validate event collector
+on:
+  push:
+    paths:
+      - 'event-collector/**'
+      - 'packages/controller-events.h'
+      - '.github/workflows/collector.yaml'
+  pull_request:
+    paths:
+      - 'event-collector/**'
+      - 'packages/controller-events.h'
+      - '.github/workflows/collector.yaml'
+permissions:
+  contents: read
+jobs:
+  collector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            event-collector/requirements.txt
+            event-collector/requirements-dev.txt
+      - name: Install collector and test dependencies
+        run: python -m pip install -r event-collector/requirements-dev.txt
+      - name: Protocol, UDP, REST, persistence and MCP tests
+        working-directory: event-collector
+        run: python -m unittest discover -s tests -v
+      - name: Validate Compose with disposable credentials
+        working-directory: event-collector
+        run: |
+          export COLLECTOR_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          docker compose -f docker-compose.yaml config --quiet
+      - name: Build container
+        run: docker build -t controller-event-collector:test event-collector
+      - name: Container UDP ingestion and persistent volume smoke test
+        working-directory: event-collector
+        run: python tests/docker_smoke.py

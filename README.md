@@ -4,6 +4,10 @@ An MIT-licensed controller for the **original ESP32 LILYGO T-Relay with four rel
 
 This release comes from the existing controller project, including its original hardware framework and latest three-board choreography. Device identities and installation labels are generic; credentials belong in your own ignored `secrets.yaml`. See [source and attribution](NOTICE.md) and [release verification](docs/release-verification.md).
 
+## Central event archive
+
+The optional [Docker event collector](event-collector/README.md) archives UDP events from **all controllers**, with a browser timeline, SQLite persistence, authenticated REST/OpenAPI endpoints, CSV export and a read-only MCP bridge for assistant integration. Run it on a Linux host attached to the controllers' broadcast network; existing firmware needs no changes. See [docker-compose.yaml](event-collector/docker-compose.yaml) and the setup guide.
+
 ## Hardware and wiring
 
 You need one original four-relay ESP32 T-Relay per controller, a suitable **12–24 V DC power supply connected to the board's DC input screw terminals**, voltage-free contact sensors, and a **LILYGO T-U2T or compatible USB-to-serial adapter with 3.3 V logic** for the first flash. Use a 2.4 GHz Wi-Fi network. This configuration uses ESP-IDF and 4 MB flash; it targets neither the T-Relay-S3 nor the eight-relay board.
