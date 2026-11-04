@@ -1,11 +1,29 @@
 "use strict";
 const $ = id => document.getElementById(id);
-let token = "", busy = false, cursor = null, shown = 0;
+let connected = false, busy = false, cursor = null, shown = 0, generation = 0;
 function message(text, error = false) { $("message").textContent = text; $("message").className = error ? "error" : ""; }
-async function api(path) {
-  const response = await fetch(path, {headers: {Authorization: `Bearer ${token}`}, cache: "no-store"});
+function setConnected(value) {
+  connected = value; generation++;
+  $("connection").hidden = value; $("session").hidden = !value;
+  if (!value) {
+    cursor = null; shown = 0; $("older").disabled = true;
+    for (const id of ["health", "stored", "controllers", "last"]) $(id).textContent = "—";
+    $("events").replaceChildren();
+    const row = $("events").insertRow(), cell = row.insertCell();
+    cell.colSpan = 6; cell.className = "empty"; cell.textContent = "Connect to load the archive.";
+    $("count").textContent = "0 shown";
+    $("source").replaceChildren(new Option("All controllers", ""));
+  }
+}
+async function api(path, options = {}) {
+  const current = generation;
+  const response = await fetch(path, {credentials: "same-origin", cache: "no-store", ...options});
   if (!response.ok) {
-    if (response.status === 401) throw new Error("Token rejected. Enter the collector’s API token and reconnect.");
+    if (response.status === 401) {
+      if (current === generation) setConnected(false);
+      const error = new Error("Token or browser session rejected. Enter the collector’s API token and reconnect.");
+      error.status = 401; throw error;
+    }
     const detail = await response.json().catch(() => ({}));
     throw new Error(`API ${response.status}: ${typeof detail.detail === "string" ? detail.detail : "Check filter values or collector health."}`);
   }
@@ -19,7 +37,8 @@ function selection() {
 }
 function localTime(value) { return value ? new Date(value).toLocaleString() : "None observed"; }
 async function refresh(append = false) {
-  if (!token || busy) return;
+  if (!connected || busy) return;
+  const current = generation;
   busy = true;
   try {
     const params = selection(); params.set("limit", "200");
@@ -28,6 +47,7 @@ async function refresh(append = false) {
       api(`/api/v1/events?${params}`).then(r => r.json()),
       api("/api/v1/status").then(r => r.json()), api("/api/v1/controllers").then(r => r.json())
     ]);
+    if (current !== generation) return;
     $("health").textContent = status.status === "ok" ? "Listening" : "Degraded";
     $("stored").textContent = status.stored_events.toLocaleString();
     $("controllers").textContent = devices.controllers.length;
@@ -51,17 +71,36 @@ async function refresh(append = false) {
     const counters = status.counters;
     const losses = counters.queue_overflows + counters.write_errors;
     message(`Updated ${new Date().toLocaleTimeString()} · ${counters.invalid_packets} invalid packets · ${losses} events lost by this collector since startup${status.storage_error ? " · Storage error" : ""}${status.retention_error ? " · Retention error" : ""}`, losses > 0 || status.status !== "ok");
-  } catch (error) { message(error.message, true); }
+  } catch (error) { if (current === generation || !connected) message(error.message, true); }
   finally { busy = false; }
 }
-$("connection").addEventListener("submit", event => { event.preventDefault(); token = $("token").value.trim(); refresh(); });
+$("connection").addEventListener("submit", async event => {
+  event.preventDefault(); $("connect").disabled = true;
+  try {
+    await api("/api/v1/session", {method: "POST", headers: {
+      Authorization: `Bearer ${$("token").value.trim()}`, "Content-Type": "application/json"
+    }, body: JSON.stringify({remember: $("remember").checked})});
+    $("token").value = ""; setConnected(true); await refresh();
+  } catch (error) { message(error.message, true); }
+  finally { $("connect").disabled = false; }
+});
+$("signout").addEventListener("click", async () => {
+  $("signout").disabled = true;
+  try {
+    await api("/api/v1/session", {method: "DELETE"});
+    setConnected(false); $("token").value = ""; message("Signed out on this browser.");
+  } catch (error) { message(error.message, true); }
+  finally { $("signout").disabled = false; }
+});
 $("filters").addEventListener("submit", event => { event.preventDefault(); refresh(); });
 $("older").addEventListener("click", () => { $("auto").checked = false; refresh(true); });
 $("export").addEventListener("click", async () => {
-  if (!token) { message("Connect before exporting.", true); return; }
+  if (!connected) { message("Connect before exporting.", true); return; }
+  const current = generation;
   try {
     const params = selection(); params.set("limit", "1000");
     const response = await api(`/api/v1/events.csv?${params}`);
+    if (current !== generation) return;
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a"); link.href = url; link.download = "controller-events.csv"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -69,3 +108,12 @@ $("export").addEventListener("click", async () => {
   } catch (error) { message(error.message, true); }
 });
 setInterval(() => { if ($("auto").checked && !document.hidden) refresh(); }, 5000);
+(async () => {
+  const current = generation;
+  try {
+    await api("/api/v1/session");
+    if (current !== generation) return;
+    setConnected(true); await refresh();
+  }
+  catch (error) { if (error.status !== 401) message(error.message, true); }
+})();

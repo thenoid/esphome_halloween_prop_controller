@@ -10,16 +10,22 @@ from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import APIKeyCookie, HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from .config import Settings
+from .browser_auth import COOKIE_NAME, COOKIE_PATH, SESSION_SECONDS, create_session, valid_session
 from .protocol import EVENT_TYPES
 from .receiver import Runtime
 from .store import timestamp
 
 EventType = Enum("EventType", {name.replace(".", "_"): name for name in EVENT_TYPES}, type=str)
 bearer = HTTPBearer(auto_error=False)
+browser_cookie = APIKeyCookie(name=COOKIE_NAME, auto_error=False)
+
+
+class BrowserSessionRequest(BaseModel):
+    remember: bool = True
 
 
 class EventRecord(BaseModel):
@@ -122,13 +128,44 @@ def filters(
                 since=start, until=end, after_id=after_id, before_id=before_id)
 
 
-def authorize(
+def authorize_token(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ):
     token = credentials.credentials if credentials else ""
     if not secrets.compare_digest(token.encode(), request.app.state.runtime.settings.api_token.encode()):
         raise HTTPException(401, "A valid bearer token is required", headers={"WWW-Authenticate": "Bearer"})
+
+
+def authorize(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    session: Annotated[str | None, Depends(browser_cookie)],
+):
+    # An explicit Authorization header always takes precedence over cookies.
+    if "authorization" in request.headers:
+        authorize_token(request, credentials)
+    elif not valid_session(session, request.app.state.runtime.settings.api_token):
+        raise HTTPException(401, "A valid bearer token or browser session is required",
+                            headers={"WWW-Authenticate": "Bearer"})
+
+
+def browser_origin(request: Request) -> bool:
+    """Check browser session mutations and identify HTTPS behind a proxy.
+
+    Browsers supply Origin on POST/DELETE. Compare it to the preserved Host;
+    don't trust arbitrary X-Forwarded-Proto headers from direct API clients.
+    Non-browser clients may omit Origin and use the connection's scheme.
+    """
+    origin = request.headers.get("origin")
+    host = request.headers.get("host", "")
+    if origin is not None:
+        if origin not in (f"https://{host}", f"http://{host}"):
+            raise HTTPException(403, "Browser session requests must use the same origin")
+        return origin.startswith("https://")
+    if request.headers.get("sec-fetch-site") == "cross-site":
+        raise HTTPException(403, "Browser session requests must use the same origin")
+    return request.url.scheme == "https"
 
 
 def create_app(settings: Settings | None = None):
@@ -146,7 +183,8 @@ def create_app(settings: Settings | None = None):
         title="Controller Event Collector", version="1.0.0", lifespan=lifespan,
         description="Read-only archive of HC1 UDP events from all controllers. "
         "received_at is collector receipt time. Delivery and physical prop operation are not guaranteed. "
-        "Use bearer authentication for /api/v1 endpoints. No event injection or controller commands.",
+        "Archive queries accept bearer authentication or a browser session. "
+        "No event injection or controller commands.",
     )
 
     @app.middleware("http")
@@ -187,6 +225,27 @@ def create_app(settings: Settings | None = None):
         return JSONResponse({"status": "ok" if healthy else "degraded"}, status_code=200 if healthy else 503)
 
     auth = [Depends(authorize)]
+
+    @app.post("/api/v1/session", dependencies=[Depends(authorize_token)], status_code=204,
+              operation_id="create_browser_session")
+    def login(request: Request, options: BrowserSessionRequest):
+        secure = browser_origin(request)
+        response = Response(status_code=204)
+        response.set_cookie(COOKIE_NAME, create_session(request.app.state.runtime.settings.api_token),
+                            max_age=SESSION_SECONDS if options.remember else None,
+                            path=COOKIE_PATH, httponly=True, secure=secure, samesite="strict")
+        return response
+
+    @app.get("/api/v1/session", dependencies=auth, operation_id="browser_session_status")
+    def session_status():
+        return {"authenticated": True}
+
+    @app.delete("/api/v1/session", status_code=204, operation_id="clear_browser_session")
+    def logout(request: Request):
+        secure = browser_origin(request)
+        response = Response(status_code=204)
+        response.delete_cookie(COOKIE_NAME, path=COOKIE_PATH, httponly=True, secure=secure, samesite="strict")
+        return response
 
     @app.get("/api/v1/status", dependencies=auth, operation_id="collector_status", response_model=CollectorStatus)
     async def status(request: Request):

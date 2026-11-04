@@ -21,7 +21,7 @@ docker compose -f docker-compose.yaml up -d --build
 docker compose -f docker-compose.yaml ps
 ```
 
-Open `http://YOUR-LINUX-HOST:8080/` and paste the token from `.env`. The browser keeps it in page memory, not local storage or URLs. Reloading the page requires reconnecting. The archive starts empty: trigger an event to see a source controller appear. Each page displays 200 observations; **Load older events** pauses automatic refresh. CSV export includes up to the newest 1,000 matching events and reports truncation.
+Open `http://YOUR-LINUX-HOST:8080/` and paste the token from `.env`. Leave **Remember me for 7 days** checked to stay signed in across refreshes. **Sign out** clears this browser's session. The archive starts empty: trigger an event to see a source controller appear. Each page displays 200 observations; **Load older events** pauses automatic refresh. CSV export includes up to the newest 1,000 matching events and reports truncation.
 
 Default ports are **18512/UDP** for ingestion and **8080/TCP** for the UI/API. Compose uses `network_mode: host`, so there is no `ports:` mapping. The named volume `collector-data` persists across container replacement and ordinary `docker compose down`; `down -v` deletes it. The process runs as UID/GID 10001 with a read-only root filesystem. Bind-mounted data directories, if used instead, must be writable by that UID.
 
@@ -37,13 +37,22 @@ For a collector on a routed network, explicitly add its unicast IPv4 address to 
 
 Docker Desktop uses a VM. Its optional host-networking feature is not a substitute for verifying LAN broadcast delivery; use native Linux for unattended collection. Tests use only loopback addresses and never send test packets onto the props' network. See [Docker host networking](https://docs.docker.com/engine/network/drivers/host/).
 
+## Browser sign-in
+
+Connecting exchanges the API token for a signed browser session; the cookie does not contain the API token. The token input is cleared after connecting, and no credential is saved in local storage or URLs. **Remember me for 7 days** is checked by default. Unchecking it creates a browser-session cookie instead of a persistent cookie. Sessions expire seven days after connecting, without extending the deadline on refresh, and survive collector restarts while the API token stays unchanged.
+
+Cookies are host-only, limited to `/api/v1`, `HttpOnly`, and `SameSite=Strict`. HTTPS connections also set `Secure`, including HTTPS proxies that preserve the original `Host` header. The session endpoints check the browser's `Origin` against that host; they do not trust `X-Forwarded-Proto`. Plain HTTP remains supported on a trusted network, with a cookie sent over HTTP. Sign out removes this browser's cookie; rotating `COLLECTOR_API_TOKEN` invalidates all saved sessions, including any copied cookies. API and MCP integrations continue to use bearer tokens.
+
 ## REST API
 
-Interactive documentation: `/docs`; machine-readable schema: `/openapi.json`. These and the UI assets are public, but every `/api/v1` endpoint requires `Authorization: Bearer TOKEN`. The Swagger documentation uses CDN-hosted assets; the review page works without Internet access.
+Interactive documentation: `/docs`; machine-readable schema: `/openapi.json`. These and the UI assets are public. Archive query endpoints require `Authorization: Bearer TOKEN` or a valid browser-session cookie. Creating a browser session requires the API token; signing out only clears the browser cookie. The Swagger documentation uses CDN-hosted assets; the review page works without Internet access.
 
 | Method/path | Purpose |
 | --- | --- |
 | `GET /healthz` | Minimal unauthenticated readiness; 200 `ok` or 503 `degraded` |
+| `POST /api/v1/session` | Bearer-authenticated sign-in; JSON `{"remember": true}`; 204 with session cookie |
+| `GET /api/v1/session` | Authenticated browser-session check; 200 if signed in |
+| `DELETE /api/v1/session` | Sign out this browser; 204 with expired cookie, even if already signed out |
 | `GET /api/v1/status` | Listener/storage health, retained archive size, process counters and queue depth |
 | `GET /api/v1/controllers` | Every source in retained history, counts and first/last receipt times |
 | `GET /api/v1/events` | Filtered, cursor-paginated observations; newest first by default |

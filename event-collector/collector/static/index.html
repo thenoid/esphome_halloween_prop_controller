@@ -11,9 +11,13 @@
       <p>One timeline for every controller. Times shown in your browser’s timezone.</p></div>
       <a href="/docs" target="_blank" rel="noopener">API documentation ↗</a></header>
     <form id="connection" class="panel connection">
-      <label>API token<input id="token" type="password" autocomplete="off" required placeholder="Paste collector token"></label>
-      <button type="submit">Connect</button><span class="muted">Token stays in this page’s memory.</span>
+      <label class="token-label">API token<input id="token" type="password" autocomplete="off" required placeholder="Paste collector token"></label>
+      <label class="check"><input id="remember" type="checkbox" checked> Remember me for 7 days</label>
+      <button id="connect" type="submit">Connect</button>
     </form>
+    <div id="session" class="panel connection" hidden>
+      <span>Connected on this browser</span><button id="signout" type="button" class="secondary">Sign out</button>
+    </div>
     <p id="message" role="status" aria-live="polite">Connect to load the archive.</p>
     <section class="metrics" aria-label="Collection health">
       <article><span>Collector</span><strong id="health">—</strong></article>
