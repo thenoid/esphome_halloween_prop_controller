@@ -1,12 +1,22 @@
-FROM python:3.13-slim
+# syntax=docker/dockerfile:1
+FROM python:3.13-slim AS dependencies
 
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
+ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && groupadd --gid 10001 collector \
+COPY pyproject.toml uv.lock .python-version ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
+
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+RUN groupadd --gid 10001 collector \
     && useradd --uid 10001 --gid collector --no-create-home collector \
     && mkdir /data && chown collector:collector /data
+COPY --from=dependencies /app/.venv /app/.venv
 COPY collector ./collector
 USER collector
 EXPOSE 8080/tcp 18512/udp

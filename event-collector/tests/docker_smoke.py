@@ -63,10 +63,15 @@ def main():
         assert len(request("/api/v1/controllers")["controllers"]) == 3
         docker("exec", name, "python", "-m", "collector.healthcheck")
         assert docker("exec", name, "id", "-u") == "10001"
+        docker("exec", name, "python", "-c",
+               "import importlib.util, shutil, sys; "
+               "assert sys.prefix == '/app/.venv'; "
+               "assert importlib.util.find_spec('yaml') is None; "
+               "assert shutil.which('uv') is None")
         docker("restart", "-t", "60", name)
         wait_ready()
         assert request("/api/v1/status")["stored_events"] == 3
-        print("Docker smoke test passed: loopback broadcast from three controllers, API, non-root, healthcheck and persistent volume.")
+        print("Docker smoke test passed: loopback broadcast, API, non-root, healthcheck, runtime-only virtual environment and persistent volume.")
     except BaseException:
         logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True)
         print(logs.stdout + logs.stderr)

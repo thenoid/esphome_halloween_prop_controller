@@ -89,11 +89,10 @@ There are no event injection, deletion, relay-control or arbitrary-SQL endpoints
 
 The optional stdio bridge exposes `collector_status`, `list_controllers`, `list_events`, and `summarize_events` as read-only tools. It authenticates to the REST API and has no direct database or controller access. Starting it does not start another collector.
 
-On the computer running your MCP client, create a Python 3.13 environment from this directory:
+On the computer running your MCP client, install [uv](https://docs.astral.sh/uv/getting-started/installation/) **0.13.6**, then create the locked Python 3.13 runtime environment from this directory:
 
 ```sh
-python3.13 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv sync --locked --no-dev
 ```
 
 The client must launch `.venv/bin/python -m collector.mcp_bridge` with this directory as its working directory, `COLLECTOR_URL` set to the reachable collector URL, and `COLLECTOR_API_TOKEN` set to the same token. No OpenAI API key is needed by the bridge.
@@ -137,19 +136,24 @@ The wire format has no device timestamp, event ID, sequence-run ID, authenticati
 
 ## Development and verification
 
+Use uv **0.13.6**; the project enforces this tested version. Python 3.13 is selected by `.python-version` and the project's Python constraint. uv can install that Python version if it is not already available locally.
+
 ```sh
-python3.13 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m unittest discover -s tests -v
+uv sync --locked
+uv run --locked --no-sync python -m unittest discover -s tests -v
 ```
 
-A C++17 compiler is required to compare packet acceptance against the firmware's actual decoder. Tests also cover packets from multiple controllers, malformed and duplicate packets, HTTP authentication, filters, pagination, CSV export, retention, restart persistence, queue/storage failures, shutdown draining, port conflicts, and a complete stdio MCP → HTTP → SQLite query. All credentials and archives are disposable. Runtime dependencies are fully pinned in `requirements.txt`; direct dependencies are listed in `requirements.in`.
+A C++17 compiler is required to compare packet acceptance against the firmware's actual decoder. Tests also cover packets from multiple controllers, malformed and duplicate packets, HTTP authentication, filters, pagination, CSV export, retention, restart persistence, queue/storage failures, shutdown draining, port conflicts, and a complete stdio MCP → HTTP → SQLite query. All credentials and archives are disposable.
+
+`pyproject.toml` declares the runtime dependencies and the development group; `uv.lock` pins the complete dependency graph and package artifact hashes. Commit both together. `uv sync --locked` includes development dependencies for tests; `uv sync --locked --no-dev` installs only runtime dependencies for the MCP bridge and production image. A stale lockfile fails the sync instead of being silently rewritten. To deliberately update a dependency, use `uv add 'package==version'` or `uv lock --upgrade-package package`, inspect the lockfile diff and rerun the tests.
+
+Docker uses pinned uv **0.13.6** in a dependency-build stage, with a BuildKit cache mount. The final image contains the runtime virtual environment and launches Python directly; startup performs no uv sync, package downloads or dependency resolution. No uv installation is needed on the Docker host. The Compose commands and persistent volume remain unchanged. The `.dockerignore` allowlist includes only the project metadata, lockfile, Python selection and application sources, keeping local virtual environments and credentials out of the build context.
 
 For the Linux container smoke test:
 
 ```sh
 docker build -t controller-event-collector:test .
-.venv/bin/python tests/docker_smoke.py
+uv run --locked --no-sync python tests/docker_smoke.py
 ```
 
 It creates a temporary container/volume, sends broadcasts only within Linux's loopback network (`127.255.255.255`), checks API results and non-root execution, restarts to verify persistence, and removes its temporary resources. Public CI runs both suites and validates Compose with a disposable token.
