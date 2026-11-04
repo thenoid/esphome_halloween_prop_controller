@@ -27,6 +27,8 @@ Default ports are **18512/UDP** for ingestion and **8080/TCP** for the UI/API. C
 
 The token is required (at least 32 non-whitespace ASCII characters). `docker compose config` resolves and displays it: do not paste that output into public issues. Keep HTTP access on a trusted network, or terminate HTTPS at a reverse proxy and restrict direct HTTP access. The token protects queries; the existing UDP protocol itself is unauthenticated and claimed controller names are not verified identities.
 
+The collector uses a build-only Compose service, with no registry image name. `docker compose pull` skips it, just like other locally built services. Build it on first installation and after pulling source updates with `docker compose -f docker-compose.yaml up -d --build collector`; ordinary starts reuse the existing image. Docker can still download the Dockerfile's base images during a build.
+
 ## Network placement
 
 The current firmware broadcasts to `255.255.255.255:18512`. A receiver on another VLAN/subnet will not ordinarily see these packets, and a published Docker bridge port does not guarantee receipt of LAN broadcasts. Native Linux host networking avoids that extra NAT boundary. Wi-Fi client isolation and broadcast filtering can still prevent reception.
@@ -115,6 +117,7 @@ Make the token available in the environment used to launch the client, or config
 Alternatively, run the bridge from a locally built container image, without mounting the archive volume:
 
 ```sh
+docker build -t controller-event-collector:local .
 docker run --rm -i --env-file .env \
   -e COLLECTOR_URL=http://YOUR-LINUX-HOST:8080 \
   controller-event-collector:local python -m collector.mcp_bridge

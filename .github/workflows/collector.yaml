@@ -32,11 +32,12 @@ jobs:
       - name: Protocol, UDP, REST, persistence and MCP tests
         working-directory: event-collector
         run: uv run --locked --no-sync python -m unittest discover -s tests -v
-      - name: Validate Compose with disposable credentials
+      - name: Validate Compose and skip pulling the build-only service with disposable credentials
         working-directory: event-collector
         run: |
           export COLLECTOR_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
           docker compose -f docker-compose.yaml config --quiet
+          docker compose -f docker-compose.yaml pull collector
       - name: Build container
         run: docker build -t controller-event-collector:test event-collector
       - name: Container UDP ingestion and persistent volume smoke test

@@ -1,7 +1,6 @@
 services:
   collector:
     build: .
-    image: controller-event-collector:local
     # Native Linux Docker Engine: receive LAN broadcasts without NAT.
     network_mode: host
     environment:
